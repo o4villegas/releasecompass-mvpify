@@ -31,31 +31,44 @@ export class Globe extends Server {
     const isTimelineUser = ctx.request.url.includes('timeline=true') ||
                           ctx.request.headers.get('User-Agent')?.includes('ReleaseCompass');
 
-    // Extract position from Cloudflare headers for legacy globe support
-    const latitude = ctx.request.cf?.latitude as string | undefined;
-    const longitude = ctx.request.cf?.longitude as string | undefined;
-
-    if (!latitude || !longitude) {
-      console.warn(`Missing position information for connection ${conn.id}`);
-      return;
-    }
-
-    const position = {
-      lat: parseFloat(latitude),
-      lng: parseFloat(longitude),
-      id: conn.id,
-    };
-
-    // Save connection state
-    conn.setState({
-      position,
-      isTimelineUser,
-    });
-
     if (isTimelineUser) {
+      // Timeline users don't need location data
+      const position = {
+        lat: 0,
+        lng: 0,
+        id: conn.id,
+      };
+
+      // Save connection state for timeline user
+      conn.setState({
+        position,
+        isTimelineUser: true,
+      });
+
       // Send timeline state to new timeline user
       this.sendTimelineSync(conn);
     } else {
+      // Legacy globe users need location data
+      const latitude = ctx.request.cf?.latitude as string | undefined;
+      const longitude = ctx.request.cf?.longitude as string | undefined;
+
+      if (!latitude || !longitude) {
+        console.warn(`Missing position information for legacy globe connection ${conn.id}`);
+        return;
+      }
+
+      const position = {
+        lat: parseFloat(latitude),
+        lng: parseFloat(longitude),
+        id: conn.id,
+      };
+
+      // Save connection state for globe user
+      conn.setState({
+        position,
+        isTimelineUser: false,
+      });
+
       // Legacy globe behavior for backward compatibility
       this.sendGlobeState(conn);
     }

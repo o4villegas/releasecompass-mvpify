@@ -33,6 +33,14 @@ function App() {
       const message = JSON.parse(evt.data as string) as OutgoingMessage;
       handleTimelineMessage(message);
     },
+    onError(evt) {
+      console.error('WebSocket error:', evt);
+      // TODO: Show user-friendly error message
+    },
+    onClose() {
+      console.log('WebSocket connection closed');
+      // TODO: Implement reconnection logic
+    },
   });
 
   const handleTimelineMessage = useCallback((message: OutgoingMessage) => {
