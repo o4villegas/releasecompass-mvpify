@@ -2,7 +2,6 @@ import "./styles.css";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { createRoot } from "react-dom/client";
-import createGlobe from "cobe";
 import usePartySocket from "partysocket/react";
 
 // The type of messages we'll be receiving from the server
@@ -346,7 +345,7 @@ function App() {
 
     const milestonesArray = Array.from(milestones.values());
 
-    // Create timeline renderer
+    // Create timeline renderer with Three.js
     const renderer = new TimelineCylinderRenderer(canvasRef.current, {
       width: 800,
       height: 600,
@@ -357,28 +356,14 @@ function App() {
       timelineEnd,
       milestones: milestonesArray,
       onMilestoneClick: handleMilestoneClick,
-      onMilestoneDrag: handleMilestoneDrag
+      onMilestoneDrag: handleMilestoneDrag,
+      onRender: (state) => {
+        // Custom render logic can be added here if needed
+        // The Three.js renderer handles all rendering internally
+      }
     });
 
     timelineRenderer.current = renderer;
-
-    // Configure cobe with timeline cylinder setup
-    const cylinderConfig = createTimelineCylinderConfig({
-      width: 800,
-      height: 600,
-      devicePixelRatio: window.devicePixelRatio || 2,
-      cylinderRadius: 2,
-      cylinderHeight: 4,
-      timelineStart,
-      timelineEnd,
-      milestones: milestonesArray,
-      onRender: (state) => {
-        // Smooth rotation animation
-        state.phi += 0.005;
-      }
-    }, renderer);
-
-    const globe = createGlobe(canvasRef.current, cylinderConfig);
 
     // Double-click to add new milestone
     const handleDoubleClick = (event: MouseEvent) => {
@@ -398,7 +383,6 @@ function App() {
     canvasRef.current.addEventListener('dblclick', handleDoubleClick);
 
     return () => {
-      globe.destroy();
       renderer.destroy();
       if (canvasRef.current) {
         canvasRef.current.removeEventListener('dblclick', handleDoubleClick);
@@ -522,7 +506,7 @@ function App() {
             ))}
           </div>
           <p className="footer-credits">
-            Powered by <a href="https://cobe.vercel.app/">Cobe</a> and{" "}
+            Powered by <a href="https://threejs.org/">Three.js</a> and{" "}
             <a href="https://npmjs.com/package/partyserver/">PartyServer</a>
           </p>
         </div>
