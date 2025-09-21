@@ -1,50 +1,451 @@
-/* 
-  We've already included normalize.css. 
-
-  But we'd like a modern looking boilerplate. 
-  Clean type, sans-serif, and a nice color palette. 
-  
+/*
+  ReleaseCompass Timeline Styles
+  Modern, professional interface for music release planning
 */
 
-body {
-  font-family: sans-serif;
-  font-size: 16px;
-  line-height: 1.5;
-  color: #999;
-  background-color: black;
-  text-align: center;
-  padding-top: 40px;
+* {
+  box-sizing: border-box;
 }
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  font-family: sans-serif;
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #e0e0e0;
+  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: inherit;
   font-weight: 600;
-  line-height: 1.25;
-  margin-top: 0;
+  line-height: 1.2;
+  margin: 0 0 0.5rem 0;
+  color: #ffffff;
+}
+
+/* Timeline App Layout */
+.timeline-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.timeline-header {
+  background: rgba(0, 0, 0, 0.8);
+  border-bottom: 1px solid #333;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  backdrop-filter: blur(10px);
+}
+
+.timeline-header h1 {
+  font-size: 1.8rem;
+  background: linear-gradient(45deg, #64b5f6, #42a5f5, #2196f3);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin: 0;
+}
+
+.timeline-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.add-milestone-btn {
+  background: linear-gradient(45deg, #4caf50, #45a049);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.add-milestone-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+}
+
+.add-milestone-btn.active {
+  background: linear-gradient(45deg, #f44336, #d32f2f);
+  box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+}
+
+.add-instruction {
+  color: #ffb74d;
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
+/* Main Timeline Layout */
+.timeline-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.timeline-3d {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: radial-gradient(ellipse at center, rgba(33, 150, 243, 0.1) 0%, transparent 70%);
+  position: relative;
+  padding: 2rem;
+}
+
+.timeline-3d canvas {
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.timeline-sidebar {
+  width: 320px;
+  background: rgba(0, 0, 0, 0.6);
+  border-left: 1px solid #333;
+  overflow-y: auto;
+  backdrop-filter: blur(10px);
+}
+
+/* Financial Summary */
+.financial-summary {
+  padding: 1.5rem;
+  border-bottom: 1px solid #333;
+}
+
+.financial-summary h3 {
+  color: #64b5f6;
+  margin-bottom: 1rem;
+  font-size: 1.2rem;
+}
+
+.financial-stats {
+  display: grid;
+  gap: 1rem;
+}
+
+.stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.75rem;
+  border-radius: 6px;
+  border-left: 3px solid #2196f3;
+}
+
+.stat label {
+  font-weight: 500;
+  color: #b0b0b0;
+}
+
+.stat span {
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.stat span.warning {
+  color: #ff5722;
+}
+
+.stat span.success {
+  color: #4caf50;
+}
+
+.stat span.risk-low {
+  color: #4caf50;
+}
+
+.stat span.risk-medium {
+  color: #ff9800;
+}
+
+.stat span.risk-high {
+  color: #f44336;
+}
+
+.critical-path {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #444;
+}
+
+.critical-path h4 {
+  color: #ff9800;
+  font-size: 1rem;
   margin-bottom: 0.5rem;
 }
 
-#app {
-  padding: 1rem;
+.critical-path ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
 }
 
-h1 {
+.critical-path li {
+  background: rgba(255, 152, 0, 0.1);
+  border-left: 3px solid #ff9800;
+  padding: 0.5rem;
+  margin: 0.25rem 0;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+/* Milestone Editor */
+.milestone-editor {
+  background: rgba(0, 0, 0, 0.8);
+  border-bottom: 1px solid #333;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #444;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.editor-header h3 {
+  color: #64b5f6;
+  margin: 0;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.milestone-editor form {
+  padding: 1.5rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #b0b0b0;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #2196f3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #444;
+}
+
+.save-btn {
+  background: linear-gradient(45deg, #4caf50, #45a049);
   color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  flex: 1;
+  transition: all 0.2s ease;
 }
 
-b {
+.save-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.delete-btn {
+  background: linear-gradient(45deg, #f44336, #d32f2f);
   color: white;
-  font-weight: bold;
+  border: none;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
 }
 
-a {
-  color: #ccc;
-  text-decoration-line: underline;
-  text-underline-offset: 3px;
-  text-decoration-color: #555;
+.delete-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
 }
+
+.cancel-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #b0b0b0;
+  border: 1px solid #444;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+/* Footer */
+.timeline-footer {
+  background: rgba(0, 0, 0, 0.8);
+  border-top: 1px solid #333;
+  padding: 1rem 2rem;
+  text-align: center;
+  backdrop-filter: blur(10px);
+}
+
+.timeline-footer p {
+  margin: 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.timeline-footer a {
+  color: #64b5f6;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.timeline-footer a:hover {
+  color: #42a5f5;
+  text-decoration: underline;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .timeline-main {
+    flex-direction: column;
+  }
+
+  .timeline-sidebar {
+    width: 100%;
+    max-height: 400px;
+  }
+
+  .timeline-3d canvas {
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .timeline-header {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .timeline-controls {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .add-milestone-btn {
+    width: 100%;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+}
+
+/* Loading and Animation Effects */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.loading {
+  animation: pulse 2s infinite;
+}
+
+/* Canvas hover effects for milestone interaction */
+.timeline-3d canvas {
+  transition: all 0.3s ease;
+}
+
+.timeline-3d canvas:hover {
+  box-shadow: 0 12px 40px rgba(33, 150, 243, 0.3);
+}
+
+/* Risk visualization color scheme */
+.risk-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 0.5rem;
+}
+
+.risk-low { background-color: #4caf50; }
+.risk-medium { background-color: #ff9800; }
+.risk-high { background-color: #f44336; }

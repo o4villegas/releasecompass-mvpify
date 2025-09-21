@@ -1,10 +1,46 @@
 // Messages that we'll send to the client
 
-// Representing a person's position
+// Legacy position type for backward compatibility
 export type Position = {
   lat: number;
   lng: number;
   id: string;
+};
+
+// Music release milestone data structure
+export type Milestone = {
+  id: string;
+  title: string;
+  date: Date;
+  budget: number;
+  actualCost: number;
+  riskLevel: 'low' | 'medium' | 'high';
+  status: 'planned' | 'in-progress' | 'completed' | 'overdue';
+  dependencies: string[]; // Array of milestone IDs
+  category: 'recording' | 'production' | 'marketing' | 'distribution' | 'legal' | 'other';
+  notes?: string;
+  // 3D position on timeline cylinder
+  timelinePosition: number; // 0-1 representing position along timeline
+  radialPosition: number; // 0-2π for position around cylinder
+};
+
+// Financial calculation results
+export type FinancialSummary = {
+  totalBudget: number;
+  totalActualCost: number;
+  projectedOverrun: number;
+  riskScore: number; // 0-100
+  criticalPath: string[]; // Array of milestone IDs
+  lastUpdated: Date;
+};
+
+// Timeline state for synchronization
+export type TimelineState = {
+  milestones: Map<string, Milestone>;
+  financialSummary: FinancialSummary;
+  timelineStart: Date;
+  timelineEnd: Date;
+  currentDate: Date;
 };
 
 export type OutgoingMessage =
@@ -15,4 +51,20 @@ export type OutgoingMessage =
   | {
       type: "remove-marker";
       id: string;
+    }
+  | {
+      type: "milestone-update";
+      milestone: Milestone;
+    }
+  | {
+      type: "milestone-delete";
+      milestoneId: string;
+    }
+  | {
+      type: "financial-update";
+      financialSummary: FinancialSummary;
+    }
+  | {
+      type: "timeline-sync";
+      state: TimelineState;
     };
