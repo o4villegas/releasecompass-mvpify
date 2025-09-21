@@ -6,10 +6,14 @@ import createGlobe from "cobe";
 import usePartySocket from "partysocket/react";
 
 // The type of messages we'll be receiving from the server
-import type { OutgoingMessage, Milestone, FinancialSummary, TimelineState } from "../shared";
+import type { OutgoingMessage, Milestone, FinancialSummary, TimelineState, Project } from "../shared";
 import type { LegacyRef } from "react";
 import { TimelineCylinderRenderer, createTimelineCylinderConfig } from "../timeline-cylinder";
 import { FinancialEngine } from "../financial-engine";
+import { ProjectModal } from "./components/ProjectModal";
+import { ProjectStorage, StoredProject } from "./storage";
+import { generateMilestones, calculateTimelineBounds } from "../milestone-templates";
+import { DependencyEngine } from "../dependency-engine";
 
 function App() {
   // Canvas reference for 3D timeline rendering
@@ -23,6 +27,12 @@ function App() {
   const [timelineEnd, setTimelineEnd] = useState<Date>(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000));
   const [selectedMilestone, setSelectedMilestone] = useState<Milestone | null>(null);
   const [isAddingMilestone, setIsAddingMilestone] = useState(false);
+
+  // Project state
+  const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  const [showProjectModal, setShowProjectModal] = useState(false);
+  const [projectsList, setProjectsList] = useState<Project[]>([]);
+  const dependencyEngine = useRef<DependencyEngine | null>(null);
 
   // Connect to PartyServer with timeline user flag
   const socket = usePartySocket({
@@ -52,12 +62,21 @@ function App() {
         setFinancialSummary(state.financialSummary);
         setTimelineStart(new Date(state.timelineStart));
         setTimelineEnd(new Date(state.timelineEnd));
+        if (state.currentProject) {
+          setCurrentProject(state.currentProject);
+        }
         break;
 
       case "milestone-update":
         setMilestones(prev => {
           const updated = new Map(prev);
           updated.set(message.milestone.id, message.milestone);
+          // Update dependency engine
+          if (dependencyEngine.current) {
+            dependencyEngine.current.updateMilestones(Array.from(updated.values()));
+          }
+          // Save to storage
+          saveCurrentState(updated);
           return updated;
         });
         break;
@@ -66,12 +85,27 @@ function App() {
         setMilestones(prev => {
           const updated = new Map(prev);
           updated.delete(message.milestoneId);
+          // Update dependency engine
+          if (dependencyEngine.current) {
+            dependencyEngine.current.updateMilestones(Array.from(updated.values()));
+          }
+          // Save to storage
+          saveCurrentState(updated);
           return updated;
         });
         break;
 
       case "financial-update":
         setFinancialSummary(message.financialSummary);
+        break;
+
+      case "project-create":
+        setCurrentProject(message.project);
+        const newMilestones = new Map(message.milestones.map(m => [m.id, m]));
+        setMilestones(newMilestones);
+        const bounds = calculateTimelineBounds(message.milestones);
+        setTimelineStart(bounds.start);
+        setTimelineEnd(bounds.end);
         break;
 
       default:
@@ -85,26 +119,164 @@ function App() {
     setSelectedMilestone(milestone);
   }, []);
 
+  // Save current state to storage
+  const saveCurrentState = useCallback((milestonesMap: Map<string, Milestone>) => {
+    if (currentProject) {
+      const storedProject: StoredProject = {
+        ...currentProject,
+        milestones: Array.from(milestonesMap.values()),
+        timelineState: {
+          timelineStart,
+          timelineEnd,
+          currentDate: new Date(),
+          currentProject
+        }
+      };
+      ProjectStorage.saveCurrentProject(storedProject);
+    }
+  }, [currentProject, timelineStart, timelineEnd]);
+
+  // Load project from storage on mount
+  useEffect(() => {
+    const stored = ProjectStorage.loadCurrentProject();
+    if (stored && stored.milestones) {
+      setCurrentProject(stored);
+      setMilestones(new Map(stored.milestones.map(m => [m.id, m])));
+
+      const bounds = calculateTimelineBounds(stored.milestones);
+      setTimelineStart(bounds.start);
+      setTimelineEnd(bounds.end);
+
+      // Initialize dependency engine
+      dependencyEngine.current = new DependencyEngine(stored.milestones);
+    } else {
+      // Show project modal if no current project
+      setShowProjectModal(true);
+    }
+
+    // Load projects list
+    setProjectsList(ProjectStorage.getProjectsList());
+  }, []);
+
+  // Create new project handler
+  const handleCreateProject = useCallback((projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const project: Project = {
+      ...projectData,
+      id: `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    // Generate milestones based on project type
+    const generatedMilestones = generateMilestones(
+      project.type,
+      project.releaseDate,
+      project.id
+    );
+
+    // Initialize dependency engine
+    dependencyEngine.current = new DependencyEngine(generatedMilestones);
+
+    // Update state
+    setCurrentProject(project);
+    const milestonesMap = new Map(generatedMilestones.map(m => [m.id, m]));
+    setMilestones(milestonesMap);
+
+    // Calculate optimal timeline bounds
+    const bounds = calculateTimelineBounds(generatedMilestones);
+    setTimelineStart(bounds.start);
+    setTimelineEnd(bounds.end);
+
+    // Save to storage
+    const storedProject: StoredProject = {
+      ...project,
+      milestones: generatedMilestones
+    };
+    ProjectStorage.saveCurrentProject(storedProject);
+
+    // Send to server
+    if (socket) {
+      socket.send(JSON.stringify({
+        type: 'project-create',
+        project,
+        milestones: generatedMilestones
+      }));
+    }
+
+    setShowProjectModal(false);
+  }, [socket]);
+
   const handleMilestoneDrag = useCallback((milestone: Milestone, newPosition: { timelinePosition: number; radialPosition: number }) => {
     // Calculate new date based on timeline position
     const totalDuration = timelineEnd.getTime() - timelineStart.getTime();
     const newDate = new Date(timelineStart.getTime() + (newPosition.timelinePosition * totalDuration));
 
-    const updatedMilestone = {
-      ...milestone,
-      date: newDate,
-      timelinePosition: newPosition.timelinePosition,
-      radialPosition: newPosition.radialPosition
-    };
+    // Check dependency constraints
+    if (dependencyEngine.current) {
+      const validation = dependencyEngine.current.validateDependencyConstraints(milestone.id, newDate);
+      if (!validation.valid) {
+        alert(`Cannot move milestone: ${validation.violations.join(', ')}`);
+        return;
+      }
 
-    // Send update to server
-    if (socket) {
-      socket.send(JSON.stringify({
-        type: 'milestone-update',
-        milestone: updatedMilestone
-      }));
+      // Calculate cascading updates
+      const cascades = dependencyEngine.current.calculateCascadingUpdates(milestone.id, newDate);
+
+      // Apply all updates
+      const updatedMilestones = new Map(milestones);
+      const updatedMilestone = {
+        ...milestone,
+        date: newDate,
+        timelinePosition: newPosition.timelinePosition,
+        radialPosition: newPosition.radialPosition
+      };
+      updatedMilestones.set(milestone.id, updatedMilestone);
+
+      // Apply cascading updates
+      cascades.forEach(update => {
+        const m = updatedMilestones.get(update.milestoneId);
+        if (m) {
+          const timelinePos = FinancialEngine.calculateTimelinePosition(
+            update.newDate,
+            timelineStart,
+            timelineEnd
+          );
+          updatedMilestones.set(update.milestoneId, {
+            ...m,
+            date: update.newDate,
+            timelinePosition: timelinePos
+          });
+        }
+      });
+
+      setMilestones(updatedMilestones);
+      saveCurrentState(updatedMilestones);
+
+      // Send update to server
+      if (socket) {
+        socket.send(JSON.stringify({
+          type: 'milestone-update',
+          milestone: updatedMilestone
+        }));
+      }
+    } else {
+      // No dependency engine, proceed without checks
+      const updatedMilestone = {
+        ...milestone,
+        date: newDate,
+        timelinePosition: newPosition.timelinePosition,
+        radialPosition: newPosition.radialPosition
+      };
+
+      // Send update to server
+      if (socket) {
+        socket.send(JSON.stringify({
+          type: 'milestone-update',
+          milestone: updatedMilestone
+        }));
+      }
     }
-  }, [socket, timelineStart, timelineEnd]);
+  }, [socket, timelineStart, timelineEnd, milestones, saveCurrentState]);
 
   const createNewMilestone = useCallback((timelinePosition: number, radialPosition: number) => {
     const totalDuration = timelineEnd.getTime() - timelineStart.getTime();
@@ -237,8 +409,25 @@ function App() {
   return (
     <div className="timeline-app">
       <header className="timeline-header">
-        <h1>ReleaseCompass Timeline</h1>
+        <div className="header-main">
+          <h1>ReleaseCompass</h1>
+          {currentProject && (
+            <div className="project-info">
+              <span className="project-name">{currentProject.name}</span>
+              <span className="project-type">{currentProject.type.toUpperCase()}</span>
+              <span className="release-date">
+                Release: {currentProject.releaseDate.toLocaleDateString()}
+              </span>
+            </div>
+          )}
+        </div>
         <div className="timeline-controls">
+          <button
+            className="btn-primary"
+            onClick={() => setShowProjectModal(true)}
+          >
+            New Project
+          </button>
           <button
             className={`add-milestone-btn ${isAddingMilestone ? 'active' : ''}`}
             onClick={() => setIsAddingMilestone(!isAddingMilestone)}
@@ -313,11 +502,37 @@ function App() {
       </div>
 
       <footer className="timeline-footer">
-        <p>
-          Powered by <a href="https://cobe.vercel.app/">🌏 Cobe</a> and{" "}
-          <a href="https://npmjs.com/package/partyserver/">🎈 PartyServer</a>
-        </p>
+        <div className="footer-content">
+          <div className="projects-list">
+            <span className="footer-label">Recent Projects:</span>
+            {projectsList.slice(0, 5).map(p => (
+              <button
+                key={p.id}
+                className={`project-link ${currentProject?.id === p.id ? 'active' : ''}`}
+                onClick={() => {
+                  const stored = ProjectStorage.loadCurrentProject();
+                  if (stored && stored.id === p.id) {
+                    setCurrentProject(p);
+                    setMilestones(new Map(stored.milestones.map(m => [m.id, m])));
+                  }
+                }}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+          <p className="footer-credits">
+            Powered by <a href="https://cobe.vercel.app/">Cobe</a> and{" "}
+            <a href="https://npmjs.com/package/partyserver/">PartyServer</a>
+          </p>
+        </div>
       </footer>
+
+      <ProjectModal
+        isOpen={showProjectModal}
+        onClose={() => setShowProjectModal(false)}
+        onCreateProject={handleCreateProject}
+      />
     </div>
   );
 }

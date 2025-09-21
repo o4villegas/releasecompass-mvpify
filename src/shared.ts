@@ -34,6 +34,18 @@ export type FinancialSummary = {
   lastUpdated: Date;
 };
 
+// Project data structure
+export type Project = {
+  id: string;
+  name: string;
+  type: 'single' | 'ep' | 'album';
+  releaseDate: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  budget: number;
+  description?: string;
+};
+
 // Timeline state for synchronization
 export type TimelineState = {
   milestones: Map<string, Milestone>;
@@ -41,6 +53,7 @@ export type TimelineState = {
   timelineStart: Date;
   timelineEnd: Date;
   currentDate: Date;
+  currentProject?: Project;
 };
 
 export type OutgoingMessage =
@@ -67,4 +80,17 @@ export type OutgoingMessage =
   | {
       type: "timeline-sync";
       state: TimelineState;
+    }
+  | {
+      type: "project-create";
+      project: Project;
+      milestones: Milestone[];
+    }
+  | {
+      type: "project-update";
+      project: Project;
+    }
+  | {
+      type: "project-load";
+      projectId: string;
     };
