@@ -1,10 +1,20 @@
+// Financial calculation engine for ReleaseCompass MVP
 import type { Milestone, FinancialSummary } from './shared';
 
-/**
- * Financial calculation engine for music release timeline
- * Provides real-time budget analysis, risk assessment, and critical path calculation
- */
 export class FinancialEngine {
+  // Project type budget baselines from roadmap requirements
+  static readonly PROJECT_BUDGETS = {
+    single: 1500,
+    ep: 6500,
+    album: 25000
+  };
+
+  // Timeline compression thresholds
+  static readonly COMPRESSION_LEVELS = {
+    mild: { threshold: 0.85, impact: 0.05 },    // 5-10% revenue impact
+    moderate: { threshold: 0.70, impact: 0.15 }, // 15-25% revenue impact
+    severe: { threshold: 0.50, impact: 0.30 }    // 30%+ revenue impact
+  };
 
   /**
    * Calculate comprehensive financial summary from milestones
@@ -12,15 +22,9 @@ export class FinancialEngine {
   static calculateFinancialSummary(milestones: Milestone[]): FinancialSummary {
     const totalBudget = milestones.reduce((sum, m) => sum + m.budget, 0);
     const totalActualCost = milestones.reduce((sum, m) => sum + m.actualCost, 0);
-
-    // Calculate projected overrun based on completion rates and trends
     const projectedOverrun = this.calculateProjectedOverrun(milestones);
-
-    // Calculate risk score based on multiple factors
     const riskScore = this.calculateRiskScore(milestones);
-
-    // Find critical path through dependencies
-    const criticalPath = this.findCriticalPath(milestones);
+    const criticalPath = this.identifyCriticalPath(milestones);
 
     return {
       totalBudget,
@@ -33,184 +37,218 @@ export class FinancialEngine {
   }
 
   /**
-   * Calculate projected budget overrun based on current trends
+   * Calculate projected budget overrun based on current spending patterns
    */
-  private static calculateProjectedOverrun(milestones: Milestone[]): number {
-    let projectedTotal = 0;
+  static calculateProjectedOverrun(milestones: Milestone[]): number {
+    const completedMilestones = milestones.filter(m => m.status === 'completed');
+    const inProgressMilestones = milestones.filter(m => m.status === 'in-progress');
+    const plannedMilestones = milestones.filter(m => m.status === 'planned');
 
-    for (const milestone of milestones) {
-      switch (milestone.status) {
-        case 'completed':
-          projectedTotal += milestone.actualCost;
-          break;
-        case 'in-progress':
-          // Project completion cost based on current overrun ratio
-          const completionRatio = milestone.actualCost / milestone.budget;
-          projectedTotal += milestone.budget * Math.max(completionRatio, 1);
-          break;
-        case 'planned':
-          // Apply risk multiplier to planned milestones
-          const riskMultiplier = this.getRiskMultiplier(milestone.riskLevel);
-          projectedTotal += milestone.budget * riskMultiplier;
-          break;
-        case 'overdue':
-          // Overdue items typically cost 20% more due to rush costs
-          projectedTotal += milestone.budget * 1.2;
-          break;
-      }
+    // Calculate average overrun percentage from completed milestones
+    let overrunRate = 0;
+    if (completedMilestones.length > 0) {
+      const totalOverrun = completedMilestones.reduce((sum, m) => {
+        const overrun = m.actualCost - m.budget;
+        return sum + (overrun > 0 ? overrun / m.budget : 0);
+      }, 0);
+      overrunRate = totalOverrun / completedMilestones.length;
     }
 
-    const totalBudget = milestones.reduce((sum, m) => sum + m.budget, 0);
-    return Math.max(0, projectedTotal - totalBudget);
+    // Project future overruns
+    const projectedInProgress = inProgressMilestones.reduce((sum, m) => {
+      const projected = m.budget * (1 + overrunRate);
+      return sum + Math.max(projected - m.budget, m.actualCost - m.budget);
+    }, 0);
+
+    const projectedPlanned = plannedMilestones.reduce((sum, m) => {
+      return sum + (m.budget * overrunRate);
+    }, 0);
+
+    const actualOverrun = completedMilestones.reduce((sum, m) => {
+      return sum + Math.max(0, m.actualCost - m.budget);
+    }, 0);
+
+    return actualOverrun + projectedInProgress + projectedPlanned;
   }
 
   /**
-   * Calculate overall risk score (0-100)
+   * Calculate overall project risk score (0-100)
    */
-  private static calculateRiskScore(milestones: Milestone[]): number {
+  static calculateRiskScore(milestones: Milestone[]): number {
     if (milestones.length === 0) return 0;
 
-    let totalRiskPoints = 0;
-    let maxPossiblePoints = 0;
+    let riskScore = 0;
+    let weightSum = 0;
 
-    for (const milestone of milestones) {
-      const weight = milestone.budget; // Weight by budget impact
-      let riskPoints = 0;
+    // Factor 1: Individual milestone risk levels (40% weight)
+    const riskLevelScore = milestones.reduce((sum, m) => {
+      const score = m.riskLevel === 'high' ? 100 : m.riskLevel === 'medium' ? 50 : 10;
+      return sum + score;
+    }, 0) / milestones.length;
+    riskScore += riskLevelScore * 0.4;
+    weightSum += 0.4;
 
-      // Risk level scoring
-      switch (milestone.riskLevel) {
-        case 'high': riskPoints += 30; break;
-        case 'medium': riskPoints += 15; break;
-        case 'low': riskPoints += 5; break;
-      }
+    // Factor 2: Timeline compression (30% weight)
+    const compressionScore = this.calculateTimelineCompression(milestones);
+    riskScore += compressionScore * 0.3;
+    weightSum += 0.3;
 
-      // Status risk scoring
-      switch (milestone.status) {
-        case 'overdue': riskPoints += 25; break;
-        case 'in-progress':
-          // Check if over budget
-          if (milestone.actualCost > milestone.budget) riskPoints += 15;
-          break;
-        case 'completed':
-          // Reduce risk for completed items
-          riskPoints = Math.max(0, riskPoints - 10);
-          break;
-      }
+    // Factor 3: Budget overrun percentage (30% weight)
+    const totalBudget = milestones.reduce((sum, m) => sum + m.budget, 0);
+    const totalActual = milestones.reduce((sum, m) => sum + m.actualCost, 0);
+    const overrunPercent = totalBudget > 0 ? Math.max(0, (totalActual - totalBudget) / totalBudget) : 0;
+    const overrunScore = Math.min(100, overrunPercent * 200); // 50% overrun = 100 score
+    riskScore += overrunScore * 0.3;
+    weightSum += 0.3;
 
-      // Dependency risk - milestones with many dependencies are riskier
-      riskPoints += Math.min(20, milestone.dependencies.length * 3);
-
-      totalRiskPoints += riskPoints * weight;
-      maxPossiblePoints += 75 * weight; // Max possible risk points per milestone
-    }
-
-    return Math.min(100, Math.round((totalRiskPoints / maxPossiblePoints) * 100));
+    return Math.min(100, Math.round(riskScore));
   }
 
   /**
-   * Find critical path through milestone dependencies
+   * Calculate timeline compression risk (0-100)
    */
-  private static findCriticalPath(milestones: Milestone[]): string[] {
-    const milestoneMap = new Map(milestones.map(m => [m.id, m]));
-    const visited = new Set<string>();
-    const criticalPath: string[] = [];
+  static calculateTimelineCompression(milestones: Milestone[]): number {
+    if (milestones.length < 2) return 0;
 
-    // Find milestone with no dependencies (start of chain)
-    const startMilestones = milestones.filter(m => m.dependencies.length === 0);
-
-    if (startMilestones.length === 0) return []; // No clear starting point
-
-    // Use DFS to find longest path (critical path)
-    const findLongestPath = (milestoneId: string, currentPath: string[]): string[] => {
-      if (visited.has(milestoneId)) return currentPath;
-
-      visited.add(milestoneId);
-      const currentMilestone = milestoneMap.get(milestoneId);
-      if (!currentMilestone) return currentPath;
-
-      const newPath = [...currentPath, milestoneId];
-
-      // Find all milestones that depend on this one
-      const dependents = milestones.filter(m =>
-        m.dependencies.includes(milestoneId)
-      );
-
-      if (dependents.length === 0) return newPath;
-
-      // Find the longest path among all dependents
-      let longestPath = newPath;
-      for (const dependent of dependents) {
-        const path = findLongestPath(dependent.id, newPath);
-        if (path.length > longestPath.length) {
-          longestPath = path;
-        }
-      }
-
-      return longestPath;
-    };
-
-    // Find the longest critical path from all starting points
-    let longestCriticalPath: string[] = [];
-    for (const start of startMilestones) {
-      visited.clear();
-      const path = findLongestPath(start.id, []);
-      if (path.length > longestCriticalPath.length) {
-        longestCriticalPath = path;
-      }
-    }
-
-    return longestCriticalPath;
-  }
-
-  /**
-   * Get risk multiplier for budget projections
-   */
-  private static getRiskMultiplier(riskLevel: 'low' | 'medium' | 'high'): number {
-    switch (riskLevel) {
-      case 'low': return 1.05;    // 5% buffer
-      case 'medium': return 1.15; // 15% buffer
-      case 'high': return 1.30;   // 30% buffer
-    }
-  }
-
-  /**
-   * Calculate timeline position (0-1) based on date and timeline bounds
-   */
-  static calculateTimelinePosition(
-    date: Date,
-    timelineStart: Date,
-    timelineEnd: Date
-  ): number {
-    const totalDuration = timelineEnd.getTime() - timelineStart.getTime();
-    const elapsed = date.getTime() - timelineStart.getTime();
-    return Math.max(0, Math.min(1, elapsed / totalDuration));
-  }
-
-  /**
-   * Calculate optimal radial position to avoid overlap
-   */
-  static calculateRadialPosition(
-    milestone: Milestone,
-    existingMilestones: Milestone[],
-    timelinePosition: number
-  ): number {
-    const nearbyMilestones = existingMilestones.filter(m =>
-      Math.abs(m.timelinePosition - timelinePosition) < 0.05 // Within 5% of timeline
+    // Sort milestones by date
+    const sorted = [...milestones].sort((a, b) =>
+      new Date(a.date).getTime() - new Date(b.date).getTime()
     );
 
-    if (nearbyMilestones.length === 0) return 0;
+    // Calculate average spacing between milestones
+    let totalDays = 0;
+    let gapCount = 0;
 
-    // Find available angular positions
-    const occupiedAngles = nearbyMilestones.map(m => m.radialPosition).sort();
-    const minSpacing = Math.PI / 6; // 30 degrees minimum spacing
-
-    // Find first available position
-    let targetAngle = 0;
-    for (const occupied of occupiedAngles) {
-      if (targetAngle + minSpacing <= occupied) break;
-      targetAngle = occupied + minSpacing;
+    for (let i = 1; i < sorted.length; i++) {
+      const daysBetween = Math.abs(
+        new Date(sorted[i].date).getTime() - new Date(sorted[i-1].date).getTime()
+      ) / (1000 * 60 * 60 * 24);
+      totalDays += daysBetween;
+      gapCount++;
     }
 
-    return targetAngle % (Math.PI * 2);
+    const avgDaysBetween = gapCount > 0 ? totalDays / gapCount : 30;
+
+    // Optimal spacing is 14-30 days between milestones
+    if (avgDaysBetween >= 14 && avgDaysBetween <= 30) {
+      return 10; // Low compression risk
+    } else if (avgDaysBetween >= 7 && avgDaysBetween < 14) {
+      return 50; // Moderate compression
+    } else if (avgDaysBetween < 7) {
+      return 90; // Severe compression
+    } else {
+      return 30; // Too sparse, moderate risk
+    }
+  }
+
+  /**
+   * Identify critical path milestones (those with dependencies)
+   */
+  static identifyCriticalPath(milestones: Milestone[]): string[] {
+    const criticalPath: string[] = [];
+    const milestoneMap = new Map(milestones.map(m => [m.id, m]));
+
+    // Find milestones that are dependencies for others
+    const isDependency = new Set<string>();
+    milestones.forEach(m => {
+      m.dependencies.forEach(dep => isDependency.add(dep));
+    });
+
+    // Add milestones that are dependencies or have high risk
+    milestones.forEach(m => {
+      if (isDependency.has(m.id) || m.riskLevel === 'high' || m.status === 'overdue') {
+        criticalPath.push(m.id);
+      }
+    });
+
+    // Sort by date
+    criticalPath.sort((a, b) => {
+      const mA = milestoneMap.get(a);
+      const mB = milestoneMap.get(b);
+      if (!mA || !mB) return 0;
+      return new Date(mA.date).getTime() - new Date(mB.date).getTime();
+    });
+
+    return criticalPath;
+  }
+
+  /**
+   * Calculate timeline position (0-1) for a date within timeline bounds
+   */
+  static calculateTimelinePosition(date: Date, startDate: Date, endDate: Date): number {
+    const totalDuration = endDate.getTime() - startDate.getTime();
+    const datePosition = date.getTime() - startDate.getTime();
+    return Math.max(0, Math.min(1, datePosition / totalDuration));
+  }
+
+  /**
+   * Calculate financial impact based on timeline compression
+   */
+  static calculateCompressionImpact(
+    milestones: Milestone[],
+    projectType: 'single' | 'ep' | 'album'
+  ): { level: string; revenueImpact: number; message: string } {
+    const compressionScore = this.calculateTimelineCompression(milestones);
+    const baseRevenue = this.PROJECT_BUDGETS[projectType];
+
+    if (compressionScore >= this.COMPRESSION_LEVELS.severe.threshold * 100) {
+      const impact = baseRevenue * this.COMPRESSION_LEVELS.severe.impact;
+      return {
+        level: 'severe',
+        revenueImpact: impact,
+        message: `Severe timeline compression detected. Potential revenue loss: $${impact.toLocaleString()}`
+      };
+    } else if (compressionScore >= this.COMPRESSION_LEVELS.moderate.threshold * 100) {
+      const impact = baseRevenue * this.COMPRESSION_LEVELS.moderate.impact;
+      return {
+        level: 'moderate',
+        revenueImpact: impact,
+        message: `Moderate timeline compression. Potential revenue impact: $${impact.toLocaleString()}`
+      };
+    } else if (compressionScore >= this.COMPRESSION_LEVELS.mild.threshold * 100) {
+      const impact = baseRevenue * this.COMPRESSION_LEVELS.mild.impact;
+      return {
+        level: 'mild',
+        revenueImpact: impact,
+        message: `Mild timeline compression. Minor revenue impact: $${impact.toLocaleString()}`
+      };
+    }
+
+    return {
+      level: 'optimal',
+      revenueImpact: 0,
+      message: 'Timeline spacing is optimal. No compression-related revenue impact.'
+    };
+  }
+
+  /**
+   * Validate milestone budget against project type baseline
+   */
+  static validateBudget(
+    totalBudget: number,
+    projectType: 'single' | 'ep' | 'album'
+  ): { isValid: boolean; message: string; percentageOfBaseline: number } {
+    const baseline = this.PROJECT_BUDGETS[projectType];
+    const percentage = (totalBudget / baseline) * 100;
+
+    if (percentage < 80) {
+      return {
+        isValid: false,
+        message: `Budget may be insufficient. Consider increasing to at least $${(baseline * 0.8).toLocaleString()}`,
+        percentageOfBaseline: percentage
+      };
+    } else if (percentage > 150) {
+      return {
+        isValid: false,
+        message: `Budget significantly exceeds typical ${projectType} costs. Review for potential optimization.`,
+        percentageOfBaseline: percentage
+      };
+    }
+
+    return {
+      isValid: true,
+      message: `Budget is appropriate for ${projectType} project.`,
+      percentageOfBaseline: percentage
+    };
   }
 }
